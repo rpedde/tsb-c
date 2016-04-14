@@ -25,6 +25,8 @@
 #include <termios.h>
 #include <unistd.h>
 
+#include <sys/ioctl.h>
+
 #include "debug.h"
 
 #define DEFAULT_SERIAL  "/dev/ttyUSB0"
@@ -153,6 +155,22 @@ speed_t get_speed(int speed) {
     return B0;
 }
 
+void set_rts(int serial_fd, int level) {
+    int status;
+
+    if(ioctl(serial_fd, TIOCMGET, &status) == -1)
+        PEXIT("TIOCMGET");
+
+    if(level)
+        status |= TIOCM_RTS;
+    else
+        status &= ~TIOCM_RTS;
+
+    if(ioctl(serial_fd, TIOCMSET, &status) == -1)
+        PEXIT("TIOCMSET");
+}
+
+
 int get_serial_fd(char *device, int baud) {
     int fd;
     struct termios term;
@@ -165,10 +183,12 @@ int get_serial_fd(char *device, int baud) {
     if(tcgetattr(fd, &term) < 0)
         PEXIT("tcgetattr");
 
-    tcflush(fd, TCIOFLUSH);
     cfsetspeed(&term, get_speed(baud));
     cfmakeraw(&term);
+    /* term.c_cflag |= CRTSCTS | CLOCAL; */
+    /* term.c_oflag = 0; */
 
+    tcflush(fd, TCIOFLUSH);
     if(tcsetattr(fd, 0, &term) < 0)
         PEXIT("tcsetattr");
 
@@ -488,6 +508,11 @@ int main(int argc, char *argv[]) {
 
         INFO("Opening serial port");
         serial_fd = get_serial_fd(serial, baud);
+
+        /* set_rts(serial_fd, 0); */
+        /* usleep(200000); */
+        /* set_rts(serial_fd, 1); */
+
         INFO("Uploading hex file");
         upload_hex_file(serial_fd, hexfile);
         INFO("Closing serial port");
